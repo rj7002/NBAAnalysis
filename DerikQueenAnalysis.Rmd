@@ -1,0 +1,300 @@
+---
+title: "Derik Queen Analysis"
+output: 
+  html_notebook:
+    df_print: paged
+  
+---
+
+```{r}
+library(reticulate)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(stringr)
+```
+
+```{python}
+import pandas as pd 
+import numpy as np 
+import requests
+import json
+import seaborn as sns
+import matplotlib.pyplot as plt
+```
+
+```{python}
+shotsurl = 'https://api.cbbanalytics.com/api/gs/pbp-shots?competitionId=38409&playerId=2313627'
+statsurl = 'https://api.cbbanalytics.com/api/gs/player-game-stats?competitionId=38409&playerId=2313627&pass=false'
+```
+
+```{python}
+response1 = requests.get(shotsurl)
+data1 = response1.json()
+shotsdf = pd.DataFrame(data1)
+```
+
+```{python}
+response2 = requests.get(statsurl)
+data2 = response2.json()
+statsdf = pd.DataFrame(data2)
+```
+
+```{python}
+# pctileurl = 'https://api.cbbanalytics.com/api/gs/pctiles-player-agg-pbp-stats/competition/38409/division/1/'
+# response3 = requests.get(pctileurl)
+# data3 = response3.json()
+# pctiledf = pd.DataFrame(data3)
+```
+
+```{r}
+head(py$shotsdf)
+```
+
+```{r}
+head(py$statsdf)
+```
+
+```{r}
+colnames(py$statsdf)
+```
+```{r}
+colnames(py$shotsdf)
+```
+```{r}
+mean(py$statsdf$usagePct)
+```
+
+```{r}
+py$statsdf %>%
+  group_by(isWin) %>%
+  summarize(avg_pts = mean(ptsScored), avg_assists = mean(ast), avg_rebounds = mean(reb))
+```
+```{r}
+py$statsdf %>%
+  group_by(quadAgst) %>%
+  summarize(avg_pts = mean(ptsScored), avg_assists = mean(ast), avg_rebounds = mean(reb),games = n())
+```
+
+```{r}
+py$statsdf %>% group_by(quadAgst) %>% summarise(avgPM = mean(plusMinus,na.rm=T)) 
+```
+```{r}
+mean(py$statsdf$netRankAgst)
+```
+
+```{r}
+library(corrplot)
+corr_data <- py$statsdf[, c("ptsScored", "ast", "reb", "fgPct", "ftPct", "tov")]
+corr_matrix <- cor(corr_data)
+corrplot(corr_matrix, method = "circle")
+```
+
+```{r}
+ggplot(py$statsdf, aes(x=poss,y=ptsScored)) + geom_point() + geom_smooth() + ggtitle('Possessions vs Points Scored')
+```
+```{r}
+ggplotly(ggplot(py$statsdf %>% arrange(desc(ptsScored)) %>% head(10),aes(x=gameDate,y=ptsScored)) + geom_bar(stat='identity') + ggtitle('Top 10 Highest Scoring Games'))
+```
+```{r}
+ggplot(py$statsdf, aes(x=usagePct)) + geom_boxplot()
+```
+```{r}
+ggplot(py$shotsdf %>% group_by(shotDist = as.integer(shotDist)) %>% summarise(shots =n(),FGPerc = mean(success)),aes(x=shotDist,y=FGPerc)) + geom_line() + geom_smooth()
+```
+```{r}
+ggplot(py$statsdf,aes(x=ptsScored,y=isHome)) + geom_violin(aes(color=isWin))
+```
+
+```{r}
+ggplotly(ggplot(py$statsdf[order(py$statsdf$gameDate), ],aes(x=gameDate,y=usagePct, group = teamId)) + geom_line(color='red',linewidth=1) + geom_point() + ggtitle('Usage Percentage Over Time'))
+```
+
+```{r}
+py$shotsdf %>% group_by(subType) %>% summarise(avgDuration = mean(actionDuration,na.rm=T))
+```
+```{r}
+ggplot(py$statsdf,aes(x=mins,y=ptsScored)) + geom_point(aes(size=usagePct))
+```
+```{r}
+ggplot(py$shotsdf,aes(x=shotDist)) + geom_histogram(color='black') + ggtitle('Shot Distance Histogram')
+```
+```{r}
+
+circle_points = function(center = c(0, 0), radius = 1, npoints = 360) {
+  angles = seq(0, 2 * pi, length.out = npoints)
+  return(data_frame(x = center[1] + radius * cos(angles),
+                    y = center[2] + radius * sin(angles)))
+}
+
+# Court Dimenons & lines
+width = 50
+height = 94 / 2
+key_height = 19
+inner_key_width = 12
+outer_key_width = 16
+backboard_width = 6
+backboard_offset = 4
+neck_length = 0.5
+hoop_radius = 0.75
+hoop_center_y = backboard_offset + neck_length + hoop_radius
+three_point_radius = 23.75
+three_point_side_radius = 22
+three_point_side_height = 14
+
+# Court themes
+court_themes = list(
+  light = list(
+    court = 'floralwhite',
+    lines = '#999999',
+    text = '#222222',
+    made = '#00bfc4',
+    missed = '#f8766d',
+    hex_border_size = 1,
+    hex_border_color = "#000000"
+  ),
+  dark = list(
+    court = '#000004',
+    lines = '#999999',
+    text = '#f0f0f0',
+    made = '#00bfc4',
+    missed = '#f8766d',
+    hex_border_size = 0,
+    hex_border_color = "#000000"
+  ),
+  ppt = list(
+    court = 'gray20',
+    lines = 'white',
+    text = '#f0f0f0',
+    made = '#00bfc4',
+    missed = '#f8766d',
+    hex_border_size = 0,
+    hex_border_color = "gray20"
+)
+)
+
+# Function to create court based on given dimensions
+plot_court = function(court_theme = court_themes$light, use_short_three = FALSE) {
+  if (use_short_three) {
+    three_point_radius = 22
+    three_point_side_height = 0
+  }
+  
+  court_points = data_frame(
+    x = c(width / 2, width / 2, -width / 2, -width / 2, width / 2),
+    y = c(height, 0, 0, height, height),
+    desc = "perimeter"
+  )
+  
+  court_points = bind_rows(court_points , data_frame(
+    x = c(outer_key_width / 2, outer_key_width / 2, -outer_key_width / 2, -outer_key_width / 2),
+    y = c(0, key_height, key_height, 0),
+    desc = "outer_key"
+  ))
+  
+  court_points = bind_rows(court_points , data_frame(
+    x = c(-backboard_width / 2, backboard_width / 2),
+    y = c(backboard_offset, backboard_offset),
+    desc = "backboard"
+  ))
+  
+  court_points = bind_rows(court_points , data_frame(
+    x = c(0, 0), y = c(backboard_offset, backboard_offset + neck_length), desc = "neck"
+  ))
+  
+  foul_circle = circle_points(center = c(0, key_height), radius = inner_key_width / 2)
+  
+  foul_circle_top = filter(foul_circle, y > key_height) %>%
+    mutate(desc = "foul_circle_top")
+  
+  foul_circle_bottom = filter(foul_circle, y < key_height) %>%
+    mutate(
+      angle = atan((y - key_height) / x) * 180 / pi,
+      angle_group = floor((angle - 5.625) / 11.25),
+      desc = paste0("foul_circle_bottom_", angle_group)
+    ) %>%
+    filter(angle_group %% 2 == 0) %>%
+    select(x, y, desc)
+  
+  hoop = circle_points(center = c(0, hoop_center_y), radius = hoop_radius) %>%
+    mutate(desc = "hoop")
+  
+  restricted = circle_points(center = c(0, hoop_center_y), radius = 4) %>%
+    filter(y >= hoop_center_y) %>%
+    mutate(desc = "restricted")
+  
+  three_point_circle = circle_points(center = c(0, hoop_center_y), radius = three_point_radius) %>%
+    filter(y >= three_point_side_height, y >= hoop_center_y)
+  
+  three_point_line = data_frame(
+    x = c(three_point_side_radius, three_point_side_radius, three_point_circle$x, -three_point_side_radius, -three_point_side_radius),
+    y = c(0, three_point_side_height, three_point_circle$y, three_point_side_height, 0),
+    desc = "three_point_line"
+  )
+  
+  court_points = bind_rows(
+    court_points,
+    foul_circle_top,
+    foul_circle_bottom,
+    hoop,
+    restricted,
+    three_point_line
+  )
+  
+  
+  court_points <- court_points
+  
+  # Final plot creation
+  ggplot() +
+    geom_path(
+      data = court_points,
+      aes(x = x, y = y, group = desc),
+      color = court_theme$lines
+    ) +
+    coord_fixed(ylim = c(0, 45), xlim = c(-25, 25)) +
+    theme_minimal(base_size = 22) +
+    theme(
+      text = element_text(color = court_theme$text),
+      plot.background = element_rect(fill = 'gray20', color = 'gray20'),
+      panel.background = element_rect(fill = court_theme$court, color = court_theme$court),
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.text = element_blank(),
+      axis.title = element_blank(),
+      axis.ticks = element_blank(),
+      legend.background = element_rect(fill = court_theme$court, color = court_theme$court),
+      legend.margin = margin(-1, 0, 0, 0, unit = "lines"),
+      legend.position = "bottom",
+      legend.key = element_blank(),
+      legend.text = element_text(size = rel(1.0))
+    )
+}
+```
+
+```{r}
+plot_court(use_short_three = T) + geom_point(aes(x=x-25,y=-y+47.5,color=success),size=3,data=py$shotsdf) 
+
+# geom_text(aes(x=x-25,y=-y+47.5,label=shotDist),data=py$shotsdf)
+```
+```{r}
+plot_court(use_short_three = T) + geom_hex(aes(x=x-25,y=-y+47.5),bins=15,data=py$shotsdf) 
+```
+```{r}
+ggplot(py$shotsdf,aes(x=shotClock)) + geom_histogram(aes(fill = success),color='black',alpha=0.5) + ggtitle('Histogram of Shot Clock at Shot Release')
+```
+```{r}
+ggplot(py$shotsdf,aes(x=actionDuration)) + geom_histogram(aes(fill = success),color='black',alpha=0.5) + ggtitle('Histogram of Posession Duration')
+```
+```{r}
+py$shotsdf %>% group_by(subType) %>% summarise(avgDist = mean(shotDist,na.rm=T),shots = n())
+```
+
+```{r}
+ggplot(py$shotsdf %>% group_by(minsIntoGame) %>% summarise(FGPerc = mean(success,na.rm=T)),aes(x=minsIntoGame,y=FGPerc)) + geom_line(linewidth=1) + ggtitle('Shooting Percentage Over Time in Game')
+```
+```{r}
+ggplot(py$statsdf,aes(x=efgPct)) + geom_boxplot(aes(color=quadAgst))
+```
+
+
+
